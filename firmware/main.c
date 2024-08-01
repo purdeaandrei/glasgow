@@ -459,36 +459,34 @@ void handle_pending_usb_setup() {
     }
     pending_setup = false;
 
-    if(!arg_chip) {
-      STALL_EP0();
+    if(arg_chip) {
+      while(arg_len > 0) {
+        uint8_t chunk_len = arg_len < 64 ? arg_len : 64;
+
+        if(arg_read) {
+          while(EP0CS & _BUSY);
+          if(!eeprom_read(arg_chip, arg_addr, EP0BUF, chunk_len, /*double_byte=*/true)) {
+            STALL_EP0();
+            return;
+//            goto stall_ep_0_return;
+          }
+          SETUP_EP0_BUF(chunk_len);
+        } else {
+          SETUP_EP0_BUF(0);
+          while(EP0CS & _BUSY);
+          if(!eeprom_write(arg_chip, arg_addr, EP0BUF, chunk_len, /*double_byte=*/true,
+                           page_size, timeout)) {
+            STALL_EP0();
+            return;
+//            goto stall_ep_0_return;
+          }
+        }
+
+        arg_len  -= chunk_len;
+        arg_addr += chunk_len;
+      }
       return;
     }
-
-    while(arg_len > 0) {
-      uint8_t chunk_len = arg_len < 64 ? arg_len : 64;
-
-      if(arg_read) {
-        while(EP0CS & _BUSY);
-        if(!eeprom_read(arg_chip, arg_addr, EP0BUF, chunk_len, /*double_byte=*/true)) {
-          STALL_EP0();
-          break;
-        }
-        SETUP_EP0_BUF(chunk_len);
-      } else {
-        SETUP_EP0_BUF(0);
-        while(EP0CS & _BUSY);
-        if(!eeprom_write(arg_chip, arg_addr, EP0BUF, chunk_len, /*double_byte=*/true,
-                         page_size, timeout)) {
-          STALL_EP0();
-          break;
-        }
-      }
-
-      arg_len  -= chunk_len;
-      arg_addr += chunk_len;
-    }
-
-    return;
   }
 
   // FPGA register read/write requests
@@ -514,9 +512,6 @@ void handle_pending_usb_setup() {
         return;
       }
     }
-
-    STALL_EP0();
-    return;
   }
 
   // Device status request
@@ -574,17 +569,15 @@ void handle_pending_usb_setup() {
       while(EP0CS & _BUSY);
       xmemcpy(EP0BUF, glasgow_config.bitstream_id, CONFIG_SIZE_BITSTREAM_ID);
       SETUP_EP0_BUF(CONFIG_SIZE_BITSTREAM_ID);
+      return;
     } else {
       if(fpga_start()) {
         SETUP_EP0_BUF(0);
         while(EP0CS & _BUSY);
         xmemcpy(glasgow_config.bitstream_id, EP0BUF, CONFIG_SIZE_BITSTREAM_ID);
-      } else {
-        STALL_EP0();
+        return;
       }
     }
-
-    return;
   }
 
   // I/O voltage get/set request
@@ -598,10 +591,9 @@ void handle_pending_usb_setup() {
 
     if(arg_get) {
       while(EP0CS & _BUSY);
-      if(!iobuf_get_voltage(arg_mask, (__xdata uint16_t *)EP0BUF)) {
-        STALL_EP0();
-      } else {
+      if(iobuf_get_voltage(arg_mask, (__xdata uint16_t *)EP0BUF)) {
         SETUP_EP0_BUF(2);
+        return;
       }
     } else {
       SETUP_EP0_BUF(2);
@@ -609,9 +601,8 @@ void handle_pending_usb_setup() {
       if(!iobuf_set_voltage(arg_mask, (__xdata uint16_t *)EP0BUF)) {
         latch_status_bit(ST_ERROR);
       }
+      return;
     }
-
-    return;
   }
 
   // Voltage sense request
@@ -629,13 +620,10 @@ void handle_pending_usb_setup() {
     else
       result = iobuf_measure_voltage_adc081c(arg_mask, (__xdata uint16_t *)EP0BUF);
 
-    if(!result) {
-      STALL_EP0();
-    } else {
+    if(result) {
       SETUP_EP0_BUF(2);
+      return;
     }
-
-    return;
   }
 
   // Voltage alert get/set request
@@ -656,10 +644,9 @@ void handle_pending_usb_setup() {
       else
         result = iobuf_get_alert_adc081c(arg_mask, (__xdata uint16_t *)EP0BUF, (__xdata uint16_t *)EP0BUF + 1);
 
-      if(!result) {
-        STALL_EP0();
-      } else {
+      if(result) {
         SETUP_EP0_BUF(4);
+        return;
       }
     } else {
       SETUP_EP0_BUF(4);
@@ -673,9 +660,8 @@ void handle_pending_usb_setup() {
       if(!result) {
         latch_status_bit(ST_ERROR);
       }
+      return;
     }
-
-    return;
   }
 
   // Alert poll request
@@ -693,15 +679,12 @@ void handle_pending_usb_setup() {
     else
       result = iobuf_poll_alert_adc081c(EP0BUF, /*clear=*/true);
 
-    if(!result) {
-      STALL_EP0();
-    } else {
+    if(result) {
       SETUP_EP0_BUF(1);
       // Clear the ERR led since we cleared the alert status above
       reset_status_bit(ST_ALERT);
+      return;
     }
-
-    return;
   }
 
   // I/O buffer enable request
@@ -728,10 +711,9 @@ void handle_pending_usb_setup() {
 
     if(arg_get) {
       while(EP0CS & _BUSY);
-      if(!iobuf_get_voltage_limit(arg_mask, (__xdata uint16_t *)EP0BUF)) {
-        STALL_EP0();
-      } else {
+      if(iobuf_get_voltage_limit(arg_mask, (__xdata uint16_t *)EP0BUF)) {
         SETUP_EP0_BUF(2);
+        return;
       }
     } else {
       SETUP_EP0_BUF(2);
@@ -747,9 +729,8 @@ void handle_pending_usb_setup() {
           latch_status_bit(ST_ERROR);
         }
       }
+      return;
     }
-
-    return;
   }
 
   // Pull resistor get/set request
@@ -763,13 +744,12 @@ void handle_pending_usb_setup() {
 
     if(arg_get) {
       while(EP0CS & _BUSY);
-      if(glasgow_config.revision < GLASGOW_REV_C0 ||
-         !iobuf_get_pull(arg_selector,
+      if(glasgow_config.revision >= GLASGOW_REV_C0 &&
+         iobuf_get_pull(arg_selector,
                          (__xdata uint8_t *)EP0BUF + 0,
                          (__xdata uint8_t *)EP0BUF + 1)) {
-        STALL_EP0();
-      } else {
         SETUP_EP0_BUF(2);
+        return;
       }
     } else {
       SETUP_EP0_BUF(2);
@@ -780,9 +760,8 @@ void handle_pending_usb_setup() {
                          *((__xdata uint8_t *)EP0BUF + 1))) {
         latch_status_bit(ST_ERROR);
       }
+      return;
     }
-
-    return;
   }
 
   // LED test mode request
@@ -833,6 +812,7 @@ void handle_pending_usb_setup() {
     return;
   }
 
+//stall_ep_0_return:
   STALL_EP0();
 }
 
