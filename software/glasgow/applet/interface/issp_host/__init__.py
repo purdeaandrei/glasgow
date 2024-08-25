@@ -371,7 +371,9 @@ class ISSPHostInterface:
         and we wait to receive that byte. After we've received it, we know
         that all state-machine commands sent before have finished.
         """
-        await self.lower.write([_Command.Kind.WAIT_PENDING.value])
+        await self.lower.write([
+            Const({"kind": _Command.Kind.WAIT_PENDING}, _Command).as_value().value
+        ])
         await self.lower.flush()
         assert 0 == (await self.lower.read(1))[0]
 
@@ -379,41 +381,58 @@ class ISSPHostInterface:
         """
         Assert xres (set to 1)  (Also, in case we're in power-cycle mode, tell the state machine that we're about to power-cycle)
         """
-        await self.lower.write([_Command.Kind.ASSERT_RESET.value])
+        await self.lower.write([
+            Const({"kind": _Command.Kind.ASSERT_RESET}, _Command).as_value().value
+        ])
         await self.wait_pending()
 
     async def deassert_xres(self):
         """
         Deassert xres (set to 0)
         """
-        await self.lower.write([_Command.Kind.DEASSERT_RESET.value])
+        await self.lower.write([
+            Const({"kind": _Command.Kind.DEASSERT_RESET}, _Command).as_value().value
+        ])
         await self.wait_pending()
 
     async def float_xres(self):
         """
         Float xres if it was previously driven
         """
-        await self.lower.write([_Command.Kind.FLOAT_RESET.value])
+        await self.lower.write([
+            Const({"kind": _Command.Kind.FLOAT_RESET}, _Command).as_value().value
+        ])
         await self.wait_pending()
 
     async def float_sclk(self):
         """
         Float sclk if it was previously driven
         """
-        await self.lower.write([_Command.Kind.FLOAT_SCLK.value])
+        await self.lower.write([
+            Const({"kind": _Command.Kind.FLOAT_SCLK}, _Command).as_value().value
+        ])
 
     async def low_sclk(self):
         """
         Drive sclk with a strong low value
         """
-        await self.lower.write([_Command.Kind.LOW_SCLK.value])
+        await self.lower.write([
+            Const({"kind": _Command.Kind.LOW_SCLK}, _Command).as_value().value
+        ])
 
     async def _send_zero_bits(self, cnt_bits = ZERO_BITS_AFTER_POLL):
         cnt_enc = cnt_bits - 1
         cnt_bytes = (cnt_bits + 7)//8
         zero_blist = [0] * cnt_bytes
         await self.lower.write([
-            _Command.Kind.SEND_BITS.value, cnt_enc >> 8, cnt_enc & 0xff, *zero_blist])
+            Const({
+                "kind": _Command.Kind.SEND_BITS,
+                "params": {
+                    "send_bits": {
+                        "do_poll": 0,
+                    }
+                }}, _Command).as_value().value,
+            cnt_enc >> 8, cnt_enc & 0xff, *zero_blist])
 
     async def send_bits(self, cnt_bits, value, do_poll=1, do_zero_bits=1, needs_single_clock_pulse_for_poll=1, needs_arbitrary_clocks_for_poll=0):
         """
@@ -434,11 +453,16 @@ class ISSPHostInterface:
             blist.append(((value << 8) >> bits_left) & 0xff)
             bits_left -= 8
         await self.lower.write([
-            (_Command.Kind.SEND_BITS.value |
-             (do_poll << 4) |
-             (needs_single_clock_pulse_for_poll << 5) |
-             (needs_arbitrary_clocks_for_poll << 6)
-            ), cnt_enc_msb, cnt_enc_lsb, *blist])
+            Const({
+                "kind": _Command.Kind.SEND_BITS,
+                "params": {
+                    "send_bits": {
+                        "do_poll": do_poll,
+                        "needs_single_clock_pulse_for_poll": needs_single_clock_pulse_for_poll,
+                        "needs_arbitrary_clocks_for_poll": needs_arbitrary_clocks_for_poll,
+                    }
+                }}, _Command).as_value().value,
+            cnt_enc_msb, cnt_enc_lsb, *blist])
         if do_zero_bits:
             await self._send_zero_bits()
 
@@ -459,11 +483,16 @@ class ISSPHostInterface:
                 piece = piece + ("0" * (8 - len(piece)))
             blist.append(int(piece, 2))
         await self.lower.write([
-            (_Command.Kind.SEND_BITS.value |
-             (do_poll << 4) |
-             (needs_single_clock_pulse_for_poll << 5) |
-             (needs_arbitrary_clocks_for_poll << 6)
-            ), cnt_enc_msb, cnt_enc_lsb, *blist])
+            Const({
+                "kind": _Command.Kind.SEND_BITS,
+                "params": {
+                    "send_bits": {
+                        "do_poll": do_poll,
+                        "needs_single_clock_pulse_for_poll": needs_single_clock_pulse_for_poll,
+                        "needs_arbitrary_clocks_for_poll": needs_arbitrary_clocks_for_poll,
+                    }
+                }}, _Command).as_value().value,
+            cnt_enc_msb, cnt_enc_lsb, *blist])
         if do_zero_bits:
             await self._send_zero_bits()
 
@@ -480,7 +509,15 @@ class ISSPHostInterface:
         """
         send_bytes = []
         for offset in range(cnt_bytes):
-            send_bytes.append(_Command.Kind.READ_BYTE.value | (reg_not_mem << 4))
+            send_bytes.append(
+                Const({
+                    "kind": _Command.Kind.READ_BYTE,
+                    "params": {
+                        "read_byte": {
+                            "reg_not_mem": reg_not_mem,
+                        }
+                    },
+                }, _Command).as_value().value)
             send_bytes.append(address + offset)
         await self.lower.write(send_bytes)
         return list(await self.lower.read(cnt_bytes))
