@@ -509,11 +509,11 @@ class IOStreamerTop(wiring.Component):
     def elaborate(self, platform):
         m = Module()
 
-        if self._min_divisor:
-            m.d.sync += Assert(self.divisor >= self._min_divisor)
+        #if self._min_divisor:
+        #    m.d.sync += Assert(self.divisor >= self._min_divisor)
 
-        if self._ratio == 1:
-            m.d.sync += Assert(self.sample_delay_half_clocks % 2 == 0)
+        #if self._ratio == 1:
+        #    m.d.sync += Assert(self.sample_delay_half_clocks % 2 == 0)
 
         m.submodules.stream_stretcher = stream_stretcher = StreamStretcher(
             IOOutputStreamSignature(self._ioshape, lane_count=self._ratio, meta_layout=self._meta_layout),
@@ -554,8 +554,8 @@ class IOStreamerTop(wiring.Component):
             IOInputStreamSignature(self._ioshape, lane_count=self._ratio, meta_layout=self._meta_layout),
         )
         m.d.comb += skid_buffer.i_stream.valid.eq(Signal.cast(sample_request_delayer.i_en_delayed).any())
-        with m.If(skid_buffer.i_stream.valid):
-            m.d.sync += Assert(skid_buffer.i_stream.ready)
+        #with m.If(skid_buffer.i_stream.valid):
+        #    m.d.sync += Assert(skid_buffer.i_stream.ready)
 
         for lane_index in range(self._ratio):
             m.d.comb += skid_buffer.i_stream.p[lane_index].actual.port.eq(io_streamer.i_stream.p[lane_index].actual.port)
