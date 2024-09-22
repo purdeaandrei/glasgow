@@ -180,11 +180,11 @@ class GlasgowBuildPlan:
                     stdout=subprocess.PIPE, stderr=subprocess.STDOUT) as proc:
                 for stdout_line in proc.stdout:
                     stdout_lines.append(stdout_line)
-                    logger.trace(f"build: %s", stdout_line.rstrip())
+                    #print("build: ", stdout_line.rstrip())
                 if proc.wait():
-                    if not logger.isEnabledFor(logging.TRACE): # don't print the log twice
-                        for stdout_line in stdout_lines:
-                            logger.info(f"build: %s", stdout_line.rstrip())
+                    #if not logger.isEnabledFor(logging.TRACE): # don't print the log twice
+                    for stdout_line in stdout_lines:
+                        print(f"build:", stdout_line.rstrip())
                     if logger.isEnabledFor(logging.INFO):
                         raise GatewareBuildError(
                             f"gateware build failed with exit code {proc.returncode}; "
@@ -193,6 +193,7 @@ class GlasgowBuildPlan:
                         raise GatewareBuildError(
                             f"gateware build failed with exit code {proc.returncode}; "
                             f"re-run `glasgow` without `-q` to view build log")
+                
 
             bitstream_data = (pathlib.Path(build_dir) / "top.bin").read_bytes()
             stdout_data = "".join(stdout_lines).encode()
